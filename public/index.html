@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>2D Canvas 3D Projection (x/z, y/z) – Wireframe Cube</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      min-height: 100vh;
+      padding: 16px;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+    canvas {
+      border: 1px solid #444;
+      background: #1a1a1a;
+      width: min(70vmin, 800px);
+      height: min(70vmin, 800px);
+      touch-action: none;
+    }
+    .hint { color: #aaa; font: 12px/1.4 system-ui, sans-serif; margin-top: 4px; }
+    .hint code { color: #ddd; }
+    .controls { margin-top: 8px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+    .controls label {
+      color: #ddd;
+      font: 14px system-ui, sans-serif;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      padding: 8px 12px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      user-select: none;
+    }
+    .controls input[type="checkbox"] {
+      cursor: pointer;
+    }
+    .controls button {
+      font: 14px system-ui, sans-serif;
+    }
+    @media (max-width: 700px) {
+      body { padding: 10px; gap: 10px; }
+      canvas {
+        width: min(92vmin, 520px);
+        height: min(92vmin, 520px);
+      }
+      .controls { gap: 8px; }
+      .controls label { font-size: 13px; padding: 10px 12px; }
+      .controls button { font-size: 16px; padding: 12px 14px; }
+      .hint { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="800" height="800"></canvas>
+  <div class="hint">
+    3D → 2D: <code>x' = x / z</code>, <code>y' = y / z</code> · View direction oscillates -30° to +30°
+  </div>
+  <div class="hint">
+    Mobile: tap and hold the buttons to move or look around.
+  </div>
+  <div class="controls">
+    <label>
+      <input type="checkbox" id="rotateAll"> Rotation On
+    </label>
+    <label>
+      <input type="checkbox" id="rotateX"> Rotate X-axis
+    </label>
+    <label>
+      <input type="checkbox" id="rotateY"> Rotate Y-axis
+    </label>
+    <label>
+      <input type="checkbox" id="rotateZ"> Rotate Z-axis
+    </label>
+    <label>
+      <input type="checkbox" id="viewOscillate"> View Oscillation
+    </label>
+    <button id="centerView" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Center View
+    </button>
+  </div>
+  <div class="controls">
+    <label>
+      Movement: arrows = strafe/forward (view-relative), J = Z+, K = Z-
+    </label>
+  </div>
+  <div class="controls">
+    <button id="moveLeft" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Move Left
+    </button>
+    <button id="moveRight" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Move Right
+    </button>
+    <button id="moveUp" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Move Up
+    </button>
+    <button id="moveDown" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Move Down
+    </button>
+    <button id="moveForward" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Move Forward
+    </button>
+    <button id="moveBack" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Move Back
+    </button>
+  </div>
+  <div class="controls">
+    <label style="min-width: 220px;">
+      Avatar Speed: <span id="moveSpeedValue">0.60</span>
+      <input type="range" id="moveSpeedSlider" min="0.1" max="2" step="0.1" value="0.6" style="width: 150px; margin-left: 8px;">
+    </label>
+  </div>
+  <div class="controls">
+    <button id="lookLeft" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Look Left
+    </button>
+    <button id="lookRight" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Look Right
+    </button>
+    <button id="lookUp" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Look Up
+    </button>
+    <button id="lookDown" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Look Down
+    </button>
+    <button id="centerAvatar" type="button" style="padding: 8px 12px; background: #3a3a3a; color: #ddd; border: 0; border-radius: 4px; cursor: pointer;">
+      Center Avatar
+    </button>
+  </div>
+  <div class="hint" id="viewerCoords">Viewer: x 0.00 · y 0.00 · z 0.00</div>
+  <div class="controls">
+    <label style="min-width: 200px;">
+      Rotation Speed: <span id="speedValue">0.25</span>
+      <input type="range" id="speedSlider" min="0" max="2" step="0.05" value="0.25" style="width: 150px; margin-left: 8px;">
+    </label>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const BACKGROUND = "#232323";
+    const FOREGROUND = "#d6ff6b";
+
+    // "Point size" if you want to draw vertices (optional)
+    const POINT_SIZE = 6;
+
+    // Rotation state
+    const rotationState = {
+      enabled: false,
+      x: false,
+      y: false,
+      z: false,
+      viewOscillate: false,
+      speed: 0.25
+    };
+    const viewerPosition = { x: 0, y: 0, z: 0 };
+    const remotePlayers = new Map();
+    let playerId = null;
+    let playerName = `Player-${Math.floor(1000 + Math.random() * 9000)}`;
+    let moveSpeed = 0.6;
+
+    // Setup toggle listeners
+    document.getElementById('rotateAll').addEventListener('change', (e) => {
+      rotationState.enabled = e.target.checked;
+    });
+    document.getElementById('rotateX').addEventListener('change', (e) => {
+      rotationState.x = e.target.checked;
+    });
+    document.getElementById('rotateY').addEventListener('change', (e) => {
+      rotationState.y = e.target.checked;
+    });
+    document.getElementById('rotateZ').addEventListener('change', (e) => {
+      rotationState.z = e.target.checked;
+    });
+    document.getElementById('viewOscillate').addEventListener('change', (e) => {
+      rotationState.viewOscillate = e.target.checked;
+    });
+    document.getElementById('speedSlider').addEventListener('input', (e) => {
+      rotationState.speed = parseFloat(e.target.value);
+      document.getElementById('speedValue').textContent = rotationState.speed.toFixed(2);
+    });
+    document.getElementById('moveSpeedSlider').addEventListener('input', (e) => {
+      moveSpeed = parseFloat(e.target.value);
+      document.getElementById('moveSpeedValue').textContent = moveSpeed.toFixed(2);
+    });
+    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const ws = new WebSocket(`${wsProtocol}://${window.location.host}`);
+    ws.addEventListener('open', () => {
+      ws.send(JSON.stringify({ type: "hello", name: playerName }));
+    });
+    ws.addEventListener('message', (event) => {
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (msg.type === "welcome") {
+        playerId = msg.id;
+        if (msg.name) playerName = msg.name;
+      }
+      if (msg.type === "state" && Array.isArray(msg.players)) {
+        remotePlayers.clear();
+        for (const p of msg.players) {
+          remotePlayers.set(p.id, p);
+        }
+        if (playerId && remotePlayers.has(playerId)) {
+          const me = remotePlayers.get(playerId);
+          viewerPosition.x = me.x;
+          viewerPosition.y = me.y;
+          viewerPosition.z = me.z;
+          updateViewerCoords();
+        }
+      }
+    });
+    let centerViewNextFrame = false;
+    let viewYaw = 0;
+    let viewPitch = 0;
+    const viewTurnSpeed = 1.2;
+    const maxPitch = 60 * (Math.PI / 180);
+    const lookHold = {
+      left: false,
+      right: false,
+      up: false,
+      down: false
+    };
+    const moveHold = {
+      left: false,
+      right: false,
+      up: false,
+      down: false,
+      forward: false,
+      back: false
+    };
+    const viewerCoords = document.getElementById('viewerCoords');
+    document.getElementById('centerView').addEventListener('click', () => {
+      centerViewNextFrame = true;
+    });
+    function bindHoldButton(id, onStart, onEnd) {
+      const el = document.getElementById(id);
+      el.addEventListener('pointerdown', () => onStart());
+      el.addEventListener('pointerup', () => onEnd());
+      el.addEventListener('pointerleave', () => onEnd());
+      el.addEventListener('pointercancel', () => onEnd());
+    }
+    bindHoldButton('lookLeft', () => {
+      rotationState.viewOscillate = false;
+      lookHold.left = true;
+    }, () => {
+      lookHold.left = false;
+    });
+    bindHoldButton('lookRight', () => {
+      rotationState.viewOscillate = false;
+      lookHold.right = true;
+    }, () => {
+      lookHold.right = false;
+    });
+    bindHoldButton('lookUp', () => {
+      rotationState.viewOscillate = false;
+      lookHold.up = true;
+    }, () => {
+      lookHold.up = false;
+    });
+    bindHoldButton('lookDown', () => {
+      rotationState.viewOscillate = false;
+      lookHold.down = true;
+    }, () => {
+      lookHold.down = false;
+    });
+    bindHoldButton('moveLeft', () => {
+      moveHold.left = true;
+    }, () => {
+      moveHold.left = false;
+    });
+    bindHoldButton('moveRight', () => {
+      moveHold.right = true;
+    }, () => {
+      moveHold.right = false;
+    });
+    bindHoldButton('moveUp', () => {
+      moveHold.up = true;
+    }, () => {
+      moveHold.up = false;
+    });
+    bindHoldButton('moveDown', () => {
+      moveHold.down = true;
+    }, () => {
+      moveHold.down = false;
+    });
+    bindHoldButton('moveForward', () => {
+      moveHold.forward = true;
+    }, () => {
+      moveHold.forward = false;
+    });
+    bindHoldButton('moveBack', () => {
+      moveHold.back = true;
+    }, () => {
+      moveHold.back = false;
+    });
+    document.getElementById('centerAvatar').addEventListener('click', () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "reset" }));
+      } else {
+        viewerPosition.x = 0;
+        viewerPosition.y = 0;
+        viewerPosition.z = 0;
+        updateViewerCoords();
+      }
+    });
+    function updateViewerCoords() {
+      viewerCoords.textContent = `Viewer: x ${viewerPosition.x.toFixed(2)} · y ${viewerPosition.y.toFixed(2)} · z ${viewerPosition.z.toFixed(2)}`;
+    }
+    updateViewerCoords();
+    window.addEventListener('keydown', (e) => {
+      let handled = true;
+      switch (e.key) {
+        case 'ArrowLeft':
+          moveHold.left = true;
+          break;
+        case 'ArrowRight':
+          moveHold.right = true;
+          break;
+        case 'ArrowUp':
+          moveHold.forward = true;
+          break;
+        case 'ArrowDown':
+          moveHold.back = true;
+          break;
+        case 'j':
+        case 'J':
+          moveHold.up = true;
+          break;
+        case 'k':
+        case 'K':
+          moveHold.down = true;
+          break;
+        case 'a':
+        case 'A':
+          rotationState.viewOscillate = false;
+          lookHold.left = true;
+          break;
+        case 'd':
+        case 'D':
+          rotationState.viewOscillate = false;
+          lookHold.right = true;
+          break;
+        case 'z':
+        case 'Z':
+          rotationState.viewOscillate = false;
+          lookHold.up = true;
+          break;
+        case 's':
+        case 'S':
+          rotationState.viewOscillate = false;
+          lookHold.down = true;
+          break;
+        default:
+          handled = false;
+      }
+      if (handled) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener('keyup', (e) => {
+      let handled = true;
+      switch (e.key) {
+        case 'ArrowLeft':
+          moveHold.left = false;
+          break;
+        case 'ArrowRight':
+          moveHold.right = false;
+          break;
+        case 'ArrowUp':
+          moveHold.forward = false;
+          break;
+        case 'ArrowDown':
+          moveHold.back = false;
+          break;
+        case 'j':
+        case 'J':
+          moveHold.up = false;
+          break;
+        case 'k':
+        case 'K':
+          moveHold.down = false;
+          break;
+        case 'a':
+        case 'A':
+          lookHold.left = false;
+          break;
+        case 'd':
+        case 'D':
+          lookHold.right = false;
+          break;
+        case 'z':
+        case 'Z':
+          lookHold.up = false;
+          break;
+        case 's':
+        case 'S':
+          lookHold.down = false;
+          break;
+        default:
+          handled = false;
+      }
+      if (handled) {
+        e.preventDefault();
+      }
+    });
+    setInterval(() => {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const move = {
+        forward: (moveHold.forward ? 1 : 0) - (moveHold.back ? 1 : 0),
+        right: (moveHold.right ? 1 : 0) - (moveHold.left ? 1 : 0),
+        up: (moveHold.up ? 1 : 0) - (moveHold.down ? 1 : 0)
+      };
+      ws.send(JSON.stringify({
+        type: "input",
+        move,
+        speed: moveSpeed,
+        view: { yaw: viewYaw, pitch: viewPitch }
+      }));
+    }, 50);
+
+    function clear() {
+      ctx.fillStyle = BACKGROUND;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // Convert normalized display coords [-1..1] with center at (0,0) into screen coords.
+    // Also flips Y so positive Y is UP (math style).
+    function screen(p2) {
+      // Map x: [-1..1] -> [0..W]
+      const nx = (p2.x + 1) / 2;
+      // Map y: [-1..1] -> [0..H] but flip so +y is up
+      const ny = 1 - (p2.y + 1) / 2;
+
+      return {
+        x: nx * W,
+        y: ny * H
+      };
+    }
+
+    // Perspective projection with variable view direction
+    // viewYaw: rotate around Z (left/right), viewPitch: rotate around X (up/down)
+    function project(p3, viewYaw, viewPitch) {
+      // Yaw around Z so "head turn" moves left/right
+      const cosYaw = Math.cos(viewYaw);
+      const sinYaw = Math.sin(viewYaw);
+      let rx = p3.x * cosYaw - p3.y * sinYaw;
+      let ry = p3.x * sinYaw + p3.y * cosYaw;
+      let rz = p3.z;
+
+      // Pitch around X so "head tilt" moves up/down
+      const cosPitch = Math.cos(viewPitch);
+      const sinPitch = Math.sin(viewPitch);
+      const ry2 = ry * cosPitch - rz * sinPitch;
+      const rz2 = ry * sinPitch + rz * cosPitch;
+
+      return {
+        x: rx / ry2,
+        y: rz2 / ry2,
+        depth: ry2
+      };
+    }
+    const BOX_FACE_INDICES = [
+      [0, 1, 2, 3],
+      [4, 5, 6, 7],
+      [0, 1, 5, 4],
+      [2, 3, 7, 6],
+      [1, 2, 6, 5],
+      [3, 0, 4, 7]
+    ];
+    function buildBoxFaces(center, size, color) {
+      const { x: cx, y: cy, z: cz } = center;
+      const { x: sx, y: sy, z: sz } = size;
+      const verts = [
+        { x: cx - sx, y: cy - sy, z: cz - sz },
+        { x: cx + sx, y: cy - sy, z: cz - sz },
+        { x: cx + sx, y: cy + sy, z: cz - sz },
+        { x: cx - sx, y: cy + sy, z: cz - sz },
+        { x: cx - sx, y: cy - sy, z: cz + sz },
+        { x: cx + sx, y: cy - sy, z: cz + sz },
+        { x: cx + sx, y: cy + sy, z: cz + sz },
+        { x: cx - sx, y: cy + sy, z: cz + sz }
+      ];
+      return BOX_FACE_INDICES.map(indices => ({
+        pts3: indices.map(i => verts[i]),
+        color
+      }));
+    }
+
+    function point(pScreen) {
+      ctx.fillStyle = FOREGROUND;
+      ctx.fillRect(
+        pScreen.x - POINT_SIZE / 2,
+        pScreen.y - POINT_SIZE / 2,
+        POINT_SIZE,
+        POINT_SIZE
+      );
+    }
+
+    function line(a, b) {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    // Rotate around Y-axis (i.e., rotate in XZ plane)
+    function rotateY(p, angle) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+
+      return {
+        x: p.x * c + p.z * s,
+        y: p.y,
+        z: -p.x * s + p.z * c
+      };
+    }
+
+    // Rotate around X-axis (optional, makes it look more 3D)
+    function rotateX(p, angle) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+
+      return {
+        x: p.x,
+        y: p.y * c - p.z * s,
+        z: p.y * s + p.z * c
+      };
+    }
+
+    // Rotate around Z-axis
+    function rotateZ(p, angle) {
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+
+      return {
+        x: p.x * c - p.y * s,
+        y: p.x * s + p.y * c,
+        z: p.z
+      };
+    }
+
+    const VS = [];
+    const FACES = [];
+    function addBox(center, size, colors) {
+      const { x: cx, y: cy, z: cz } = center;
+      const { x: sx, y: sy, z: sz } = size;
+      const i = VS.length;
+      VS.push(
+        { x: cx - sx, y: cy - sy, z: cz - sz }, // 0
+        { x: cx + sx, y: cy - sy, z: cz - sz }, // 1
+        { x: cx + sx, y: cy + sy, z: cz - sz }, // 2
+        { x: cx - sx, y: cy + sy, z: cz - sz }, // 3
+        { x: cx - sx, y: cy - sy, z: cz + sz }, // 4
+        { x: cx + sx, y: cy - sy, z: cz + sz }, // 5
+        { x: cx + sx, y: cy + sy, z: cz + sz }, // 6
+        { x: cx - sx, y: cy + sy, z: cz + sz }  // 7
+      );
+      const faceIndices = [
+        [0, 1, 2, 3], // back
+        [4, 5, 6, 7], // front
+        [0, 1, 5, 4], // bottom
+        [2, 3, 7, 6], // top
+        [1, 2, 6, 5], // right
+        [3, 0, 4, 7]  // left
+      ];
+      for (let f = 0; f < faceIndices.length; f++) {
+        FACES.push({
+          idx: faceIndices[f].map(v => v + i),
+          color: colors[f % colors.length]
+        });
+      }
+    }
+
+    // Castle base
+    addBox(
+      { x: 0, y: -0.2, z: 0 },
+      { x: 0.6, y: 0.25, z: 0.4 },
+      ["#6e6b5f", "#7b786a", "#5f5c52", "#8a8677", "#777463", "#6a675a"]
+    );
+
+    // Four corner towers
+    const towerSize = { x: 0.14, y: 0.4, z: 0.14 };
+    const towerColors = ["#5b5a52", "#6a6960", "#4f4e47", "#7a786e", "#65645b", "#595850"];
+    addBox({ x: -0.5, y: 0.1, z: -0.3 }, towerSize, towerColors);
+    addBox({ x:  0.5, y: 0.1, z: -0.3 }, towerSize, towerColors);
+    addBox({ x: -0.5, y: 0.1, z:  0.3 }, towerSize, towerColors);
+    addBox({ x:  0.5, y: 0.1, z:  0.3 }, towerSize, towerColors);
+
+    // Keep
+    addBox(
+      { x: 0, y: 0.25, z: 0 },
+      { x: 0.25, y: 0.35, z: 0.2 },
+      ["#8b8a80", "#9a988c", "#7a796f", "#b0aea0", "#8f8d81", "#868579"]
+    );
+
+    // Render settings
+    ctx.strokeStyle = "#1c1c1c";
+    ctx.lineWidth = 2;
+
+    // Animation
+    let last = performance.now();
+    let time = 0;
+    let angleX = 0;
+    let angleY = 0;
+    let angleZ = 0;
+
+    function frame(now) {
+      const dt = (now - last) / 1000;
+      last = now;
+      time += dt;
+
+      // Update rotation angles based on toggles
+      if (rotationState.enabled) {
+        const rotSpeed = Math.PI * 2 * rotationState.speed;
+        if (rotationState.x) angleX += rotSpeed * dt;
+        if (rotationState.y) angleY += rotSpeed * dt;
+        if (rotationState.z) angleZ += rotSpeed * dt;
+      }
+
+      // Oscillate view angle from -30 to +30 degrees
+      const maxViewAngle = 30 * (Math.PI / 180);
+      if (rotationState.viewOscillate) {
+        viewYaw = Math.sin(time * 0.5) * maxViewAngle;
+      }
+      if (centerViewNextFrame) {
+        viewYaw = 0;
+        viewPitch = 0;
+        centerViewNextFrame = false;
+      }
+      if (lookHold.left) viewYaw -= viewTurnSpeed * dt;
+      if (lookHold.right) viewYaw += viewTurnSpeed * dt;
+      if (lookHold.up) viewPitch = Math.min(maxPitch, viewPitch + viewTurnSpeed * dt);
+      if (lookHold.down) viewPitch = Math.max(-maxPitch, viewPitch - viewTurnSpeed * dt);
+
+      clear();
+
+      // Transform vertices: translate forward in Y so y is always > 0.
+      const yPush = 2.2;
+
+      const transformed = VS.map(v => {
+        let p = v;
+        // Apply rotations based on toggle state
+        if (rotationState.x) p = rotateX(p, angleX);
+        if (rotationState.y) p = rotateY(p, angleY);
+        if (rotationState.z) p = rotateZ(p, angleZ);
+        return {
+          x: p.x - viewerPosition.x,
+          y: p.y + yPush - viewerPosition.y,
+          z: p.z - viewerPosition.z
+        };
+      });
+
+      const nearPlane = 0.2;
+      const allFaces = FACES.map(face => ({
+        pts3: face.idx.map(i => transformed[i]),
+        color: face.color
+      }));
+      if (remotePlayers.size) {
+        for (const p of remotePlayers.values()) {
+          if (p.id === playerId) continue;
+          const avatarCenter = {
+            x: p.x - viewerPosition.x,
+            y: p.y + yPush - viewerPosition.y,
+            z: p.z - viewerPosition.z
+          };
+          allFaces.push(...buildBoxFaces(avatarCenter, { x: 0.06, y: 0.06, z: 0.1 }, p.color || "#7bdff2"));
+        }
+      }
+      const faceRender = allFaces.map(face => {
+        const projected = face.pts3.map(p3 => project(p3, viewYaw, viewPitch));
+        if (projected.some(p => p.depth <= nearPlane)) {
+          return null;
+        }
+        const avgDepth = projected.reduce((sum, p) => sum + p.depth, 0) / projected.length;
+        const pts2 = projected.map(p => screen(p));
+        return { pts2, avgDepth, color: face.color };
+      }).filter(Boolean).sort((a, b) => b.avgDepth - a.avgDepth);
+
+      for (const face of faceRender) {
+        ctx.beginPath();
+        ctx.moveTo(face.pts2[0].x, face.pts2[0].y);
+        for (let i = 1; i < face.pts2.length; i++) {
+          ctx.lineTo(face.pts2[i].x, face.pts2[i].y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = face.color;
+        ctx.fill();
+        ctx.stroke();
+      }
+      if (remotePlayers.size) {
+        ctx.fillStyle = "#f2f2f2";
+        ctx.font = "12px system-ui, sans-serif";
+        for (const p of remotePlayers.values()) {
+          if (p.id === playerId) continue;
+          const labelPos = {
+            x: p.x - viewerPosition.x,
+            y: p.y + yPush - viewerPosition.y,
+            z: p.z + 0.18 - viewerPosition.z
+          };
+          const projected = project(labelPos, viewYaw, viewPitch);
+          if (projected.depth <= nearPlane) continue;
+          const pos2 = screen(projected);
+          ctx.fillText(p.name || "Player", pos2.x + 6, pos2.y - 4);
+        }
+      }
+
+      // Optional: draw points
+      // for (const p of pts2) point(p);
+
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+  </script>
+  <script>
+    const liveReload = new EventSource("/events");
+    liveReload.addEventListener("message", (event) => {
+      if (event.data === "reload") {
+        window.location.reload();
+      }
+    });
+  </script>
+</body>
+</html>
